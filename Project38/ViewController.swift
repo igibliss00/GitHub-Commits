@@ -12,26 +12,41 @@ import CoreData
 class ViewController: UITableViewController {
     var container: NSPersistentContainer!
     var commits = [Commit]()
+    var commitPredicate: NSPredicate?
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Filter", style: .plain, target: self, action: #selector(changeFilter))
         
         container = NSPersistentContainer(name: "Project38")
-        
         container.loadPersistentStores { (storeDescription, error) in
+            // if two objcts with the same unique constraint exist, the in-memory version "trumps" (overwrites) the data store version
+            self.container.viewContext.mergePolicy = NSMergeByPropertyStoreTrumpMergePolicy
+            
             if let error = error {
                 print("Unresovled error \(error)")
             }
         }
         
-        saveContext()
-        
         performSelector(inBackground: #selector(fetchCommits), with: nil)
-        
+        saveContext()
         loadSavedData()
     }
 
+    @objc func changeFilter() {
+        let ac = UIAlertController(title: "Filter commits...", message: nil, preferredStyle: .actionSheet)
+        
+        ac.addAction(UIAlertAction(title: "Show only fixes", style: .default, handler: { [unowned self](_) in
+            self.commitPredicate = NSPredicate(format: "message CONTAINS[c] 'fix'")
+            self.loadSavedData()
+        }))
+        ac.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        present(ac, animated: true)
+    }
+    
+    // MARK: - Core Data
+    
     func saveContext() {
         // observes properties with the keyword @NSManaged and gets set to true automatically when you make changes to your objects
         if container.viewContext.hasChanges {
@@ -47,6 +62,7 @@ class ViewController: UITableViewController {
         let request = Commit.createFetchRequest()
         let sort = NSSortDescriptor(key: "date", ascending: false)
         request.sortDescriptors = [sort]
+        request.predicate = commitPredicate
         
         do {
             commits = try container.viewContext.fetch(request)
